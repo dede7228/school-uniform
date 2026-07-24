@@ -7,6 +7,8 @@ export async function proxy(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/cron") ||
+    // Netlify 定时函数（daily-youtube）走这个路径，不能被登录门禁拦截
+    pathname.startsWith("/.netlify") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   ) {
@@ -29,5 +31,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|\\.netlify).*)"],
 };

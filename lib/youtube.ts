@@ -28,20 +28,27 @@ export async function searchYoutubeTrending(limit = 10): Promise<YoutubeCandidat
   const publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const idSet = new Set<string>();
 
-  for (const keyword of KEYWORDS) {
-    const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");
-    searchUrl.searchParams.set("key", apiKey);
-    searchUrl.searchParams.set("part", "snippet");
-    searchUrl.searchParams.set("type", "video");
-    searchUrl.searchParams.set("order", "viewCount");
-    searchUrl.searchParams.set("maxResults", "10");
-    searchUrl.searchParams.set("publishedAfter", publishedAfter);
-    searchUrl.searchParams.set("q", keyword);
+  // 并行搜索：定时函数单次执行有时限，串行 5 次会白白多花几秒
+  const searches = await Promise.all(
+    KEYWORDS.map(async (keyword) => {
+      const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");
+      searchUrl.searchParams.set("key", apiKey);
+      searchUrl.searchParams.set("part", "snippet");
+      searchUrl.searchParams.set("type", "video");
+      searchUrl.searchParams.set("order", "viewCount");
+      searchUrl.searchParams.set("maxResults", "10");
+      searchUrl.searchParams.set("publishedAfter", publishedAfter);
+      searchUrl.searchParams.set("q", keyword);
 
-    const res = await fetch(searchUrl.toString());
-    if (!res.ok) continue;
-    const data = await res.json();
-    for (const item of data.items ?? []) {
+      const res = await fetch(searchUrl.toString());
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.items ?? [];
+    }),
+  );
+
+  for (const items of searches) {
+    for (const item of items) {
       if (item.id?.videoId) idSet.add(item.id.videoId);
     }
   }
