@@ -3,6 +3,8 @@ import { searchYoutubeTrending } from "./youtube";
 import { summarizeVideo } from "./claude";
 
 const DAILY_TARGET = 10;
+// 5 个关键词 × 每个最多 10 条 = 候选池上限约 50 条，全部取回后再去重
+const CANDIDATE_POOL = 50;
 
 export interface CronResult {
   inserted: number;
@@ -31,7 +33,9 @@ export async function runYoutubeCron(options?: { maxPerRun?: number }): Promise<
   const { data: existing } = await supabase.from("videos").select("url");
   const existingUrls = new Set((existing ?? []).map((row) => row.url));
 
-  const candidates = (await searchYoutubeTrending(remaining * 2)).filter(
+  // 必须先取回完整候选池再去重：searchYoutubeTrending 会按播放量排序后截断，
+  // 若只取 remaining*2 条，这几条往往正是之前已收录的，去重后就一条不剩了。
+  const candidates = (await searchYoutubeTrending(CANDIDATE_POOL)).filter(
     (c) => !existingUrls.has(c.url),
   );
 
