@@ -1,19 +1,23 @@
-import { runYoutubeCron } from "../../lib/cron-youtube";
-
-// Netlify 定时函数单次执行有时限，这里每次只抓少量，
-// 在早晨时间窗内多次触发凑够当天名额；名额满后各次会快速空跑。
+// 定时函数执行上限 30 秒，装不下 AI 拆解（跨境调用 LongCat 单条就要 15-30 秒，
+// 冷启动时必超）。所以这里只负责「按点扣扳机」：把活丢给上限 15 分钟的后台函数，
+// 自己立刻返回。后台函数收到请求后返回 202，然后继续在后台跑完。
 export default async () => {
-  // 一条视频的 AI 拆解约 15 秒，定时函数上限 30 秒，
-  // 所以单次只处理 1 条，靠高频触发凑满当天名额。
-  const result = await runYoutubeCron({ maxPerRun: 1 });
-  console.log("[daily-youtube]", JSON.stringify(result));
-  return new Response(JSON.stringify(result), {
+  const target = `${process.env.URL}/.netlify/functions/daily-youtube-background`;
+  const secret = process.env.CRON_SECRET;
+
+  const res = await fetch(target, {
+    method: "POST",
+    headers: secret ? { authorization: `Bearer ${secret}` } : undefined,
+  });
+
+  console.log("[daily-youtube] triggered background:", res.status);
+  return new Response(JSON.stringify({ triggered: true, status: res.status }), {
     headers: { "content-type": "application/json" },
   });
 };
 
-// 每 5 分钟触发一次，UTC 1:00–4:59（北京时间 9:00–12:59）＝ 48 次机会凑 10 条。
-// 名额满后各次会在调用 YouTube 前直接返回，不消耗接口配额。
+// 每天 UTC 1:00 触发一次（北京时间 9:00）。
+// 后台函数内部有当天名额上限，重复触发不会超量。
 export const config = {
-  schedule: "*/5 1-4 * * *",
+  schedule: "0 1 * * *",
 };
